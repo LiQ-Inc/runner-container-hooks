@@ -93,19 +93,35 @@ export async function createPod(
 
   appPod.spec = new k8s.V1PodSpec()
   appPod.spec.containers = containers
+  appPod.spec.initContainers = [
+    {
+      name: 'fs-init',
+      image: 'ghcr.io/actions/actions-runner:latest',
+      command: [
+        'sh',
+        '-c',
+        'sudo mv /home/runner/* /mnt/runner/ && sudo chmod -R 777 /mnt/runner'
+      ],
+      securityContext: {
+        runAsGroup: 1001,
+        runAsUser: 1001,
+        privileged: true
+      },
+      volumeMounts: [
+        {
+          name: POD_VOLUME_NAME,
+          mountPath: '/mnt/runner'
+        }
+      ]
+    }
+  ]
+
   appPod.spec.restartPolicy = 'Never'
 
-  const nodeName = await getCurrentNodeName()
-  if (useKubeScheduler()) {
-    appPod.spec.affinity = await getPodAffinity(nodeName)
-  } else {
-    appPod.spec.nodeName = nodeName
-  }
-  const claimName = getVolumeClaimName()
   appPod.spec.volumes = [
     {
-      name: 'work',
-      persistentVolumeClaim: { claimName }
+      name: POD_VOLUME_NAME,
+      emptyDir: {}
     }
   ]
 
