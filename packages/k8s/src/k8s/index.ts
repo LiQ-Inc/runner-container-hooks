@@ -4,17 +4,15 @@ import * as stream from 'stream'
 import type { ContainerInfo, Registry } from 'hooklib'
 import {
   getJobPodName,
-  getRunnerPodName,
   getSecretName,
   getStepPodName,
-  getVolumeClaimName,
+  JOB_CONTAINER_NAME,
   RunnerInstanceLabel
 } from '../hooks/constants'
 import {
   PodPhase,
   mergePodSpecWithOptions,
   mergeObjectMeta,
-  useKubeScheduler,
   fixArgs
 } from './utils'
 
@@ -28,7 +26,7 @@ const k8sAuthorizationV1Api = kc.makeApiClient(k8s.AuthorizationV1Api)
 
 const DEFAULT_WAIT_FOR_POD_TIME_SECONDS = 10 * 60 // 10 min
 
-export const POD_VOLUME_NAME = 'work'
+export const EXTERNALS_VOLUME_NAME = 'externals'
 
 export const requiredPermissions = [
   {
@@ -96,11 +94,12 @@ export async function createPod(
   appPod.spec.initContainers = [
     {
       name: 'fs-init',
+      // TODO: switch to the runners image
       image: 'ghcr.io/actions/actions-runner:latest',
       command: [
         'sh',
         '-c',
-        'sudo mv /home/runner/* /mnt/runner/ && sudo chmod -R 777 /mnt/runner'
+        'sudo mv /home/runner/externals/* /mnt/externals && sudo chmod -R 777 /mnt/externals'
       ],
       securityContext: {
         runAsGroup: 1001,
@@ -109,8 +108,8 @@ export async function createPod(
       },
       volumeMounts: [
         {
-          name: POD_VOLUME_NAME,
-          mountPath: '/mnt/runner'
+          name: EXTERNALS_VOLUME_NAME,
+          mountPath: '/mnt/externals'
         }
       ]
     }
@@ -120,7 +119,7 @@ export async function createPod(
 
   appPod.spec.volumes = [
     {
-      name: POD_VOLUME_NAME,
+      name: EXTERNALS_VOLUME_NAME,
       emptyDir: {}
     }
   ]
@@ -175,18 +174,10 @@ export async function createJob(
   job.spec.template.spec.containers = [container]
   job.spec.template.spec.restartPolicy = 'Never'
 
-  const nodeName = await getCurrentNodeName()
-  if (useKubeScheduler()) {
-    job.spec.template.spec.affinity = await getPodAffinity(nodeName)
-  } else {
-    job.spec.template.spec.nodeName = nodeName
-  }
-
-  const claimName = getVolumeClaimName()
   job.spec.template.spec.volumes = [
     {
-      name: 'work',
-      persistentVolumeClaim: { claimName }
+      name: EXTERNALS_VOLUME_NAME,
+      emptyDir: {}
     }
   ]
 
@@ -243,12 +234,15 @@ export async function execPodStep(
   command: string[],
   podName: string,
   containerName: string,
-  stdin?: stream.Readable
-): Promise<void> {
+  stdin?: stream.Readable,
+  useShlex = true
+): Promise<number> {
   const exec = new k8s.Exec(kc)
-  command = fixArgs(command)
-  // Exec returns a websocket. If websocket fails, we should reject the promise. Otherwise, websocket will call a callback. Since at that point, websocket is not failing, we can safely resolve or reject the promise.
-  await new Promise(function (resolve, reject) {
+
+  if (useShlex) {
+    command = fixArgs(command)
+  }
+  return await new Promise(function (resolve, reject) {
     exec
       .exec(
         namespace(),
@@ -260,9 +254,9 @@ export async function execPodStep(
         stdin ?? null,
         false /* tty */,
         resp => {
-          // kube.exec returns an error if exit code is not 0, but we can't actually get the exit code
+          core.debug(`execPodStep response: ${JSON.stringify(resp)}`)
           if (resp.status === 'Success') {
-            resolve(resp.code)
+            resolve(resp.code || 0)
           } else {
             core.debug(
               JSON.stringify({
@@ -270,13 +264,23 @@ export async function execPodStep(
                 details: resp?.details
               })
             )
-            reject(resp?.message)
+            reject(new Error(resp?.message || 'execPodStep failed'))
           }
         }
       )
-      // If exec.exec fails, explicitly reject the outer promise
       .catch(e => reject(e))
   })
+}
+
+export async function execCp(podName): Promise<void> {
+  const cp = new k8s.Cp(kc)
+  await cp.cpToPod(
+    namespace(),
+    podName,
+    JOB_CONTAINER_NAME,
+    '/home/runner/_work',
+    '/__w'
+  )
 }
 
 export async function waitForJobToComplete(jobName: string): Promise<void> {
@@ -554,39 +558,6 @@ export async function isPodContainerAlpine(
   }
 
   return isAlpine
-}
-
-async function getCurrentNodeName(): Promise<string> {
-  const resp = await k8sApi.readNamespacedPod({
-    name: getRunnerPodName(),
-    namespace: namespace()
-  })
-
-  const nodeName = resp.spec?.nodeName
-  if (!nodeName) {
-    throw new Error('Failed to determine node name')
-  }
-  return nodeName
-}
-
-async function getPodAffinity(nodeName: string): Promise<k8s.V1Affinity> {
-  const affinity = new k8s.V1Affinity()
-  affinity.nodeAffinity = new k8s.V1NodeAffinity()
-  affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution =
-    new k8s.V1NodeSelector()
-  affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms =
-    [
-      {
-        matchExpressions: [
-          {
-            key: 'kubernetes.io/hostname',
-            operator: 'In',
-            values: [nodeName]
-          }
-        ]
-      }
-    ]
-  return affinity
 }
 
 export function namespace(): string {

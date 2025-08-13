@@ -244,10 +244,8 @@ export function createContainerSpec(
     })
   }
 
-  podContainer.volumeMounts = containerVolumes(
-    container.userMountVolumes,
-    jobContainer
-  )
+  // TODO: handle user volume mounts
+  podContainer.volumeMounts = containerVolumes()
 
   if (!extension) {
     return podContainer

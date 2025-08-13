@@ -138,7 +138,7 @@ function createContainerSpec(
       }
     ]
   }
-  podContainer.volumeMounts = containerVolumes(undefined, false, true)
+  podContainer.volumeMounts = containerVolumes()
 
   if (!extension) {
     return podContainer

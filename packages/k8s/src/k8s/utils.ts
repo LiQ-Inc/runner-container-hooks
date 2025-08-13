@@ -2,10 +2,8 @@ import * as k8s from '@kubernetes/client-node'
 import * as fs from 'fs'
 import * as yaml from 'js-yaml'
 import * as core from '@actions/core'
-import { Mount } from 'hooklib'
-import * as path from 'path'
 import { v1 as uuidv4 } from 'uuid'
-import { POD_VOLUME_NAME } from './index'
+import { EXTERNALS_VOLUME_NAME } from './index'
 import { CONTAINER_EXTENSION_PREFIX } from '../hooks/constants'
 import * as shlex from 'shlex'
 
@@ -15,98 +13,13 @@ export const DEFAULT_CONTAINER_ENTRY_POINT = 'tail'
 export const ENV_HOOK_TEMPLATE_PATH = 'ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE'
 export const ENV_USE_KUBE_SCHEDULER = 'ACTIONS_RUNNER_USE_KUBE_SCHEDULER'
 
-export function containerVolumes(
-  userMountVolumes: Mount[] = [],
-  jobContainer = true,
-  containerAction = false
-): k8s.V1VolumeMount[] {
-  const mounts: k8s.V1VolumeMount[] = [
+export function containerVolumes(): k8s.V1VolumeMount[] {
+  return [
     {
-      name: POD_VOLUME_NAME,
-      mountPath: '/__w'
+      name: EXTERNALS_VOLUME_NAME,
+      mountPath: '/__e'
     }
   ]
-
-  const workspacePath = process.env.GITHUB_WORKSPACE as string
-  if (containerAction) {
-    const i = workspacePath.lastIndexOf('_work/')
-    const workspaceRelativePath = workspacePath.slice(i + '_work/'.length)
-    mounts.push(
-      {
-        name: POD_VOLUME_NAME,
-        mountPath: '/github/workspace',
-        subPath: workspaceRelativePath
-      },
-      {
-        name: POD_VOLUME_NAME,
-        mountPath: '/github/file_commands',
-        subPath: '_temp/_runner_file_commands'
-      },
-      {
-        name: POD_VOLUME_NAME,
-        mountPath: '/github/home',
-        subPath: '_temp/_github_home'
-      },
-      {
-        name: POD_VOLUME_NAME,
-        mountPath: '/github/workflow',
-        subPath: '_temp/_github_workflow'
-      }
-    )
-    return mounts
-  }
-
-  if (!jobContainer) {
-    return mounts
-  }
-
-  mounts.push(
-    {
-      name: POD_VOLUME_NAME,
-      mountPath: '/__e',
-      subPath: 'externals'
-    },
-    {
-      name: POD_VOLUME_NAME,
-      mountPath: '/github/home',
-      subPath: '_temp/_github_home'
-    },
-    {
-      name: POD_VOLUME_NAME,
-      mountPath: '/github/workflow',
-      subPath: '_temp/_github_workflow'
-    }
-  )
-
-  if (!userMountVolumes?.length) {
-    return mounts
-  }
-
-  for (const userVolume of userMountVolumes) {
-    let sourceVolumePath = ''
-    if (path.isAbsolute(userVolume.sourceVolumePath)) {
-      if (!userVolume.sourceVolumePath.startsWith(workspacePath)) {
-        throw new Error(
-          'Volume mounts outside of the work folder are not supported'
-        )
-      }
-      // source volume path should be relative path
-      sourceVolumePath = userVolume.sourceVolumePath.slice(
-        workspacePath.length + 1
-      )
-    } else {
-      sourceVolumePath = userVolume.sourceVolumePath
-    }
-
-    mounts.push({
-      name: POD_VOLUME_NAME,
-      mountPath: userVolume.targetVolumePath,
-      subPath: sourceVolumePath,
-      readOnly: userVolume.readOnly
-    })
-  }
-
-  return mounts
 }
 
 export function writeEntryPointScript(
@@ -298,4 +211,8 @@ function mergeLists<T>(base?: T[], from?: T[]): T[] {
 
 export function fixArgs(args: string[]): string[] {
   return shlex.split(args.join(' '))
+}
+
+export async function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
