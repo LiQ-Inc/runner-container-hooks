@@ -2,8 +2,13 @@
 import * as fs from 'fs'
 import * as core from '@actions/core'
 import { RunScriptStepArgs } from 'hooklib'
-import { execCp, execPodStep } from '../k8s'
-import { writeEntryPointScript, sleep } from '../k8s/utils'
+import {
+  execCalculateOutputHash,
+  execCp,
+  execPodStep,
+  localCalculateOutputHash
+} from '../k8s'
+import { writeEntryPointScript, sleep, listDirAllCommand } from '../k8s/utils'
 import { JOB_CONTAINER_NAME } from './constants'
 
 export async function runScriptStep(
@@ -23,21 +28,30 @@ export async function runScriptStep(
 
   await execCp(state.jobPod)
 
+  const want = await localCalculateOutputHash([
+    'sh',
+    '-c',
+    listDirAllCommand('/home/runner/_work')
+  ])
+
   let attempts = 10
   const delay = 1000
   for (let i = 0; i < attempts; i++) {
     try {
-      const exitCode = await execPodStep(
-        ['sh', '-c', `test -e "${containerPath}" || exit 1`],
+      const got = await execCalculateOutputHash(
         state.jobPod,
         JOB_CONTAINER_NAME,
-        undefined,
-        false
+        ['sh', '-c', listDirAllCommand('/__w')]
       )
-      if (exitCode !== 0) {
+
+      if (got !== want) {
+        core.warning(
+          `The hash of the directory does not match the expected value; want='${want}' got='${got}'`
+        )
         await sleep(delay)
         continue
       }
+
       break
     } catch (error) {
       core.warning(`Attempt ${i + 1} failed: ${error}`)

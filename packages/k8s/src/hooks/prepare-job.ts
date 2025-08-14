@@ -1,5 +1,4 @@
 import * as core from '@actions/core'
-import * as io from '@actions/io'
 import * as k8s from '@kubernetes/client-node'
 import {
   JobContainerInfo,
@@ -8,7 +7,6 @@ import {
   writeToResponseFile,
   ServiceContainerInfo
 } from 'hooklib'
-import path from 'path'
 import {
   containerPorts,
   createPod,
@@ -40,7 +38,6 @@ export async function prepareJob(
   await prunePods()
 
   const extension = readExtensionFromFile()
-  await copyExternalsToRoot()
 
   let container: k8s.V1Container | undefined = undefined
   if (args.container?.image) {
@@ -182,17 +179,6 @@ function generateResponseFile(
   }
 
   writeToResponseFile(responseFile, JSON.stringify(response))
-}
-
-async function copyExternalsToRoot(): Promise<void> {
-  const workspace = process.env['RUNNER_WORKSPACE']
-  if (workspace) {
-    await io.cp(
-      path.join(workspace, '../../externals'),
-      path.join(workspace, '../externals'),
-      { force: true, recursive: true, copySourceDirectory: false }
-    )
-  }
 }
 
 export function createContainerSpec(

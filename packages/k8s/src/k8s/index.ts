@@ -1,6 +1,8 @@
 import * as core from '@actions/core'
+import * as actionsExec from '@actions/exec'
 import * as k8s from '@kubernetes/client-node'
 import * as stream from 'stream'
+import { createHash } from 'crypto'
 import type { ContainerInfo, Registry } from 'hooklib'
 import {
   getJobPodName,
@@ -234,14 +236,11 @@ export async function execPodStep(
   command: string[],
   podName: string,
   containerName: string,
-  stdin?: stream.Readable,
-  useShlex = true
+  stdin?: stream.Readable
 ): Promise<number> {
   const exec = new k8s.Exec(kc)
 
-  if (useShlex) {
-    command = fixArgs(command)
-  }
+  command = fixArgs(command)
   return await new Promise(function (resolve, reject) {
     exec
       .exec(
@@ -270,6 +269,85 @@ export async function execPodStep(
       )
       .catch(e => reject(e))
   })
+}
+
+export async function execCalculateOutputHash(
+  podName: string,
+  containerName: string,
+  command: string[]
+): Promise<string> {
+  const exec = new k8s.Exec(kc)
+
+  // Create a writable stream that updates a SHA-256 hash with stdout data
+  const hash = createHash('sha256')
+  const hashWriter = new stream.Writable({
+    write(chunk, _enc, cb) {
+      try {
+        console.log(`=== REMOTE CHUNK ===\n${chunk}|\n===`)
+        hash.update(chunk.toString('utf8') as Buffer)
+        cb()
+      } catch (e) {
+        cb(e as Error)
+      }
+    }
+  })
+
+  await new Promise<void>((resolve, reject) => {
+    exec
+      .exec(
+        namespace(),
+        podName,
+        containerName,
+        command,
+        hashWriter, // capture stdout for hashing
+        process.stderr,
+        null,
+        false /* tty */,
+        resp => {
+          core.debug(`internalExecOutput response: ${JSON.stringify(resp)}`)
+          if (resp.status === 'Success') {
+            resolve()
+          } else {
+            core.debug(
+              JSON.stringify({
+                message: resp?.message,
+                details: resp?.details
+              })
+            )
+            reject(new Error(resp?.message || 'internalExecOutput failed'))
+          }
+        }
+      )
+      .catch(e => reject(e))
+  })
+
+  // finalize hash and return digest
+  hashWriter.end()
+  return hash.digest('hex')
+}
+
+export async function localCalculateOutputHash(
+  commands: string[]
+): Promise<string> {
+  // Create a writable stream that updates a SHA-256 hash with stdout data
+  const hash = createHash('sha256')
+  const hashWriter = new stream.Writable({
+    write(chunk, _enc, cb) {
+      try {
+        console.log(`=== LOCAL CHUNK ===\n${chunk}|\n===`)
+        hash.update(chunk.toString('utf8') as Buffer)
+        cb()
+      } catch (e) {
+        cb(e as Error)
+      }
+    }
+  })
+  await actionsExec.getExecOutput(commands[0], commands.slice(1), {
+    outStream: hashWriter
+  })
+  
+  hashWriter.end()
+  return hash.digest('hex')
 }
 
 export async function execCp(podName): Promise<void> {
