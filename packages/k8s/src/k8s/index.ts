@@ -15,7 +15,9 @@ import {
   PodPhase,
   mergePodSpecWithOptions,
   mergeObjectMeta,
-  fixArgs
+  fixArgs,
+  listDirAllCommand,
+  sleep
 } from './utils'
 
 const kc = new k8s.KubeConfig()
@@ -334,10 +336,9 @@ export async function localCalculateOutputHash(
       stdio: ['ignore', 'pipe', 'ignore']
     })
 
-    child.stdout.on('data', (chunk) => hash.update(chunk))
+    child.stdout.on('data', chunk => hash.update(chunk))
     child.on('error', reject)
     child.on('close', (code: number) => {
-      console.log('calculating home dir')
       if (code === 0) {
         resolve(hash.digest('hex'))
       } else {
@@ -347,15 +348,46 @@ export async function localCalculateOutputHash(
   })
 }
 
-export async function execCpToPod(podName: string): Promise<void> {
+export async function execCpToPod(
+  podName: string,
+  src: string,
+  dst: string
+): Promise<void> {
+  core.debug(`Copying ${src} to pod ${podName} at ${dst}`)
+
   const cp = new k8s.Cp(kc)
-  await cp.cpToPod(
-    namespace(),
-    podName,
-    JOB_CONTAINER_NAME,
-    '/home/runner/_work',
-    '/__w'
-  )
+  await cp.cpToPod(namespace(), podName, JOB_CONTAINER_NAME, src, dst)
+
+  const want = await localCalculateOutputHash([
+    'sh',
+    '-c',
+    listDirAllCommand(src)
+  ])
+
+  let attempts = 10
+  const delay = 1000
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const got = await execCalculateOutputHash(podName, JOB_CONTAINER_NAME, [
+        'sh',
+        '-c',
+        listDirAllCommand(dst)
+      ])
+
+      if (got !== want) {
+        core.debug(
+          `The hash of the directory does not match the expected value; want='${want}' got='${got}'`
+        )
+        await sleep(delay)
+        continue
+      }
+
+      break
+    } catch (error) {
+      core.debug(`Attempt ${i + 1} failed: ${error}`)
+      await sleep(delay)
+    }
+  }
 }
 
 export async function execCpFromPod(podName: string): Promise<void> {

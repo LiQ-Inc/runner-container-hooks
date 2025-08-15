@@ -13,7 +13,8 @@ import {
   isPodContainerAlpine,
   prunePods,
   waitForPodPhases,
-  getPrepareJobTimeoutSeconds
+  getPrepareJobTimeoutSeconds,
+  execCpToPod
 } from '../k8s'
 import {
   containerVolumes,
@@ -26,6 +27,7 @@ import {
   fixArgs
 } from '../k8s/utils'
 import { CONTAINER_EXTENSION_PREFIX, JOB_CONTAINER_NAME } from './constants'
+import { dirname } from 'path'
 
 export async function prepareJob(
   args: PrepareJobArgs,
@@ -100,6 +102,12 @@ export async function prepareJob(
     await prunePods()
     throw new Error(`pod failed to come online with error: ${err}`)
   }
+
+  await execCpToPod(
+    createdPod.metadata.name,
+    dirname(process.env.RUNNER_WORKSPACE as string),
+    '/__w'
+  )
 
   core.debug('Job pod is ready for traffic')
 

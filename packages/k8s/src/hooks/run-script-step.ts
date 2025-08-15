@@ -2,14 +2,10 @@
 import * as fs from 'fs'
 import * as core from '@actions/core'
 import { RunScriptStepArgs } from 'hooklib'
-import {
-  execCalculateOutputHash,
-  execCpToPod,
-  execPodStep,
-  localCalculateOutputHash
-} from '../k8s'
+import { execCpToPod, execPodStep } from '../k8s'
 import { writeEntryPointScript, sleep, listDirAllCommand } from '../k8s/utils'
 import { JOB_CONTAINER_NAME } from './constants'
+import { dirname } from 'path'
 
 export async function runScriptStep(
   args: RunScriptStepArgs,
@@ -26,38 +22,9 @@ export async function runScriptStep(
     environmentVariables
   )
 
-  await execCpToPod(state.jobPod)
+  const workdir = dirname(process.env.RUNNER_WORKSPACE as string)
 
-  const want = await localCalculateOutputHash([
-    'sh',
-    '-c',
-    listDirAllCommand('/home/runner/_work')
-  ])
-
-  let attempts = 10
-  const delay = 1000
-  for (let i = 0; i < attempts; i++) {
-    try {
-      const got = await execCalculateOutputHash(
-        state.jobPod,
-        JOB_CONTAINER_NAME,
-        ['sh', '-c', listDirAllCommand('/__w')]
-      )
-
-      if (got !== want) {
-        core.debug(
-          `The hash of the directory does not match the expected value; want='${want}' got='${got}'`
-        )
-        await sleep(delay)
-        continue
-      }
-
-      break
-    } catch (error) {
-      core.debug(`Attempt ${i + 1} failed: ${error}`)
-      await sleep(delay)
-    }
-  }
+  await execCpToPod(state.jobPod, `${workdir}/_temp`, '/__w/_temp')
 
   // Execute the entrypoint script
   args.entryPoint = 'sh'
