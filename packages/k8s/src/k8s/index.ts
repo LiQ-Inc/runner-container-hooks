@@ -98,8 +98,9 @@ export async function createPod(
   appPod.spec.initContainers = [
     {
       name: 'fs-init',
-      // TODO: switch to the runners image
-      image: 'ghcr.io/actions/actions-runner:latest',
+      image:
+        process.env.ACTIONS_RUNNER_IMAGE ||
+        'ghcr.io/actions/actions-runner:latest',
       command: [
         'sh',
         '-c',
