@@ -4,7 +4,7 @@ import * as core from '@actions/core'
 import { RunScriptStepArgs } from 'hooklib'
 import {
   execCalculateOutputHash,
-  execCp,
+  execCpToPod,
   execPodStep,
   localCalculateOutputHash
 } from '../k8s'
@@ -26,7 +26,7 @@ export async function runScriptStep(
     environmentVariables
   )
 
-  await execCp(state.jobPod)
+  await execCpToPod(state.jobPod)
 
   const want = await localCalculateOutputHash([
     'sh',
@@ -73,9 +73,6 @@ export async function runScriptStep(
     const message = (err as any)?.response?.body?.message || err
     throw new Error(`failed to run script step: ${message}`)
   } finally {
-    // console.log('Sleeping 30s')
-    // await sleep(30000)
-
     fs.rmSync(runnerPath)
   }
 }

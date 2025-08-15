@@ -291,13 +291,6 @@ export async function execCalculateOutputHash(
     }
   })
 
-  // Create a no-op sink for stderr to suppress output
-  const sink = new stream.Writable({
-    write(_chunk, _enc, cb) {
-      cb()
-    }
-  })
-
   await new Promise<void>((resolve, reject) => {
     exec
       .exec(
@@ -306,7 +299,7 @@ export async function execCalculateOutputHash(
         containerName,
         command,
         hashWriter, // capture stdout for hashing
-        sink, // suppress stderr
+        process.stderr,
         null,
         false /* tty */,
         resp => {
@@ -341,9 +334,10 @@ export async function localCalculateOutputHash(
       stdio: ['ignore', 'pipe', 'ignore']
     })
 
-    child.stdout.on('data', (chunk: Buffer) => hash.update(chunk))
+    child.stdout.on('data', (chunk) => hash.update(chunk))
     child.on('error', reject)
     child.on('close', (code: number) => {
+      console.log('calculating home dir')
       if (code === 0) {
         resolve(hash.digest('hex'))
       } else {
@@ -353,9 +347,20 @@ export async function localCalculateOutputHash(
   })
 }
 
-export async function execCp(podName: string): Promise<void> {
+export async function execCpToPod(podName: string): Promise<void> {
   const cp = new k8s.Cp(kc)
   await cp.cpToPod(
+    namespace(),
+    podName,
+    JOB_CONTAINER_NAME,
+    '/home/runner/_work',
+    '/__w'
+  )
+}
+
+export async function execCpFromPod(podName: string): Promise<void> {
+  const cp = new k8s.Cp(kc)
+  await cp.cpFromPod(
     namespace(),
     podName,
     JOB_CONTAINER_NAME,
