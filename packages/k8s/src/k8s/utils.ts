@@ -218,5 +218,5 @@ export async function sleep(ms: number): Promise<void> {
 }
 
 export function listDirAllCommand(dir: string): string {
-  return `cd ${dir} && find .`
+  return `cd ${dir} && find . -not -path '*/_runner_hook_responses/*'`
 }

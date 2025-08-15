@@ -2,7 +2,7 @@
 import * as fs from 'fs'
 import * as core from '@actions/core'
 import { RunScriptStepArgs } from 'hooklib'
-import { execCpToPod, execPodStep } from '../k8s'
+import { execCpFromPod, execCpToPod, execPodStep } from '../k8s'
 import { writeEntryPointScript, sleep, listDirAllCommand } from '../k8s/utils'
 import { JOB_CONTAINER_NAME } from './constants'
 import { dirname } from 'path'
@@ -14,7 +14,7 @@ export async function runScriptStep(
 ): Promise<void> {
   // Write the entrypoint first. This will be later coppied to the workflow pod
   const { entryPoint, entryPointArgs, environmentVariables } = args
-  const { containerPath, runnerPath } = writeEntryPointScript(
+  const { containerPath } = writeEntryPointScript(
     args.workingDirectory,
     entryPoint,
     entryPointArgs,
@@ -23,8 +23,9 @@ export async function runScriptStep(
   )
 
   const workdir = dirname(process.env.RUNNER_WORKSPACE as string)
-
-  await execCpToPod(state.jobPod, `${workdir}/_temp`, '/__w/_temp')
+  const containerTemp = '/__w/_temp'
+  const runnerTemp = `${workdir}/_temp`
+  await execCpToPod(state.jobPod, runnerTemp, containerTemp)
 
   // Execute the entrypoint script
   args.entryPoint = 'sh'
@@ -39,7 +40,14 @@ export async function runScriptStep(
     core.debug(`execPodStep failed: ${JSON.stringify(err)}`)
     const message = (err as any)?.response?.body?.message || err
     throw new Error(`failed to run script step: ${message}`)
+  }
+
+  try {
+    await execCpFromPod(state.jobPod, containerTemp, runnerTemp)
+  } catch (error) {
+    core.warning('Failed to copy _temp from pod')
   } finally {
-    fs.rmSync(runnerPath)
+    // remove entire temp dir because it will be copied in the next step again
+    fs.rmSync(containerTemp, { recursive: true, force: true })
   }
 }

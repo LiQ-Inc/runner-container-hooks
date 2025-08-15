@@ -336,7 +336,9 @@ export async function localCalculateOutputHash(
       stdio: ['ignore', 'pipe', 'ignore']
     })
 
-    child.stdout.on('data', chunk => hash.update(chunk))
+    child.stdout.on('data', chunk => {
+      hash.update(chunk)
+    })
     child.on('error', reject)
     child.on('close', (code: number) => {
       if (code === 0) {
@@ -350,18 +352,24 @@ export async function localCalculateOutputHash(
 
 export async function execCpToPod(
   podName: string,
-  src: string,
-  dst: string
+  runnerPath: string,
+  containerPath: string
 ): Promise<void> {
-  core.debug(`Copying ${src} to pod ${podName} at ${dst}`)
+  core.debug(`Copying ${runnerPath} to pod ${podName} at ${containerPath}`)
 
   const cp = new k8s.Cp(kc)
-  await cp.cpToPod(namespace(), podName, JOB_CONTAINER_NAME, src, dst)
+  await cp.cpToPod(
+    namespace(),
+    podName,
+    JOB_CONTAINER_NAME,
+    runnerPath,
+    containerPath
+  )
 
   const want = await localCalculateOutputHash([
     'sh',
     '-c',
-    listDirAllCommand(src)
+    listDirAllCommand(runnerPath)
   ])
 
   let attempts = 10
@@ -371,7 +379,7 @@ export async function execCpToPod(
       const got = await execCalculateOutputHash(podName, JOB_CONTAINER_NAME, [
         'sh',
         '-c',
-        listDirAllCommand(dst)
+        listDirAllCommand(containerPath)
       ])
 
       if (got !== want) {
@@ -390,14 +398,18 @@ export async function execCpToPod(
   }
 }
 
-export async function execCpFromPod(podName: string): Promise<void> {
+export async function execCpFromPod(
+  podName: string,
+  containerPath: string,
+  runnerPath: string
+): Promise<void> {
   const cp = new k8s.Cp(kc)
   await cp.cpFromPod(
     namespace(),
     podName,
     JOB_CONTAINER_NAME,
-    '/home/runner/_work',
-    '/__w'
+    containerPath,
+    runnerPath
   )
 }
 
