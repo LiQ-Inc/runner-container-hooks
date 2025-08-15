@@ -45,7 +45,7 @@ export async function runScriptStep(
       )
 
       if (got !== want) {
-        core.warning(
+        core.debug(
           `The hash of the directory does not match the expected value; want='${want}' got='${got}'`
         )
         await sleep(delay)
@@ -54,7 +54,7 @@ export async function runScriptStep(
 
       break
     } catch (error) {
-      core.warning(`Attempt ${i + 1} failed: ${error}`)
+      core.debug(`Attempt ${i + 1} failed: ${error}`)
       await sleep(delay)
     }
   }

@@ -1,5 +1,5 @@
 import * as core from '@actions/core'
-import * as actionsExec from '@actions/exec'
+import { spawn } from 'child_process'
 import * as k8s from '@kubernetes/client-node'
 import * as stream from 'stream'
 import { createHash } from 'crypto'
@@ -283,12 +283,18 @@ export async function execCalculateOutputHash(
   const hashWriter = new stream.Writable({
     write(chunk, _enc, cb) {
       try {
-        console.log(`=== REMOTE CHUNK ===\n${chunk}|\n===`)
         hash.update(chunk.toString('utf8') as Buffer)
         cb()
       } catch (e) {
         cb(e as Error)
       }
+    }
+  })
+
+  // Create a no-op sink for stderr to suppress output
+  const sink = new stream.Writable({
+    write(_chunk, _enc, cb) {
+      cb()
     }
   })
 
@@ -300,7 +306,7 @@ export async function execCalculateOutputHash(
         containerName,
         command,
         hashWriter, // capture stdout for hashing
-        process.stderr,
+        sink, // suppress stderr
         null,
         false /* tty */,
         resp => {
@@ -329,28 +335,25 @@ export async function execCalculateOutputHash(
 export async function localCalculateOutputHash(
   commands: string[]
 ): Promise<string> {
-  // Create a writable stream that updates a SHA-256 hash with stdout data
-  const hash = createHash('sha256')
-  const hashWriter = new stream.Writable({
-    write(chunk, _enc, cb) {
-      try {
-        console.log(`=== LOCAL CHUNK ===\n${chunk}|\n===`)
-        hash.update(chunk.toString('utf8') as Buffer)
-        cb()
-      } catch (e) {
-        cb(e as Error)
+  return await new Promise<string>((resolve, reject) => {
+    const hash = createHash('sha256')
+    const child = spawn(commands[0], commands.slice(1), {
+      stdio: ['ignore', 'pipe', 'ignore']
+    })
+
+    child.stdout.on('data', (chunk: Buffer) => hash.update(chunk))
+    child.on('error', reject)
+    child.on('close', (code: number) => {
+      if (code === 0) {
+        resolve(hash.digest('hex'))
+      } else {
+        reject(new Error(`child process exited with code ${code}`))
       }
-    }
+    })
   })
-  await actionsExec.getExecOutput(commands[0], commands.slice(1), {
-    outStream: hashWriter
-  })
-  
-  hashWriter.end()
-  return hash.digest('hex')
 }
 
-export async function execCp(podName): Promise<void> {
+export async function execCp(podName: string): Promise<void> {
   const cp = new k8s.Cp(kc)
   await cp.cpToPod(
     namespace(),
