@@ -26,7 +26,7 @@ import {
   PodPhase,
   fixArgs
 } from '../k8s/utils'
-import { CONTAINER_EXTENSION_PREFIX, JOB_CONTAINER_NAME } from './constants'
+import { CONTAINER_EXTENSION_PREFIX, getJobPodName, JOB_CONTAINER_NAME } from './constants'
 import { dirname } from 'path'
 
 export async function prepareJob(
@@ -72,6 +72,7 @@ export async function prepareJob(
   let createdPod: k8s.V1Pod | undefined = undefined
   try {
     createdPod = await createPod(
+      getJobPodName(),
       container,
       services,
       args.container.registry,

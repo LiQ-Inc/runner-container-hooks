@@ -3,7 +3,7 @@ import * as fs from 'fs'
 import * as core from '@actions/core'
 import { RunScriptStepArgs } from 'hooklib'
 import { execCpFromPod, execCpToPod, execPodStep } from '../k8s'
-import { writeEntryPointScript, sleep, listDirAllCommand } from '../k8s/utils'
+import { writeScript, sleep, listDirAllCommand } from '../k8s/utils'
 import { JOB_CONTAINER_NAME } from './constants'
 import { dirname } from 'path'
 
@@ -14,7 +14,8 @@ export async function runScriptStep(
 ): Promise<void> {
   // Write the entrypoint first. This will be later coppied to the workflow pod
   const { entryPoint, entryPointArgs, environmentVariables } = args
-  const { containerPath } = writeEntryPointScript(
+  const { containerPath, runnerPath } = writeScript(
+    "/__w",
     args.workingDirectory,
     entryPoint,
     entryPointArgs,
@@ -48,6 +49,6 @@ export async function runScriptStep(
     core.warning('Failed to copy _temp from pod')
   } finally {
     // remove entire temp dir because it will be copied in the next step again
-    fs.rmSync(containerTemp, { recursive: true, force: true })
+    fs.rmSync(runnerPath, { recursive: true, force: true })
   }
 }

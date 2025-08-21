@@ -5,9 +5,7 @@ import * as stream from 'stream'
 import { createHash } from 'crypto'
 import type { ContainerInfo, Registry } from 'hooklib'
 import {
-  getJobPodName,
   getSecretName,
-  getStepPodName,
   JOB_CONTAINER_NAME,
   RunnerInstanceLabel
 } from '../hooks/constants'
@@ -52,12 +50,6 @@ export const requiredPermissions = [
     subresource: 'log'
   },
   {
-    group: 'batch',
-    verbs: ['get', 'list', 'create', 'delete'],
-    resource: 'jobs',
-    subresource: ''
-  },
-  {
     group: '',
     verbs: ['create', 'delete', 'get', 'list'],
     resource: 'secrets',
@@ -66,6 +58,7 @@ export const requiredPermissions = [
 ]
 
 export async function createPod(
+  name: string,
   jobContainer?: k8s.V1Container,
   services?: k8s.V1Container[],
   registry?: Registry,
@@ -85,7 +78,7 @@ export async function createPod(
   appPod.kind = 'Pod'
 
   appPod.metadata = new k8s.V1ObjectMeta()
-  appPod.metadata.name = getJobPodName()
+  appPod.metadata.name = name
 
   const instanceLabel = new RunnerInstanceLabel()
   appPod.metadata.labels = {
@@ -151,80 +144,6 @@ export async function createPod(
     namespace: namespace(),
     body: appPod
   })
-}
-
-export async function createJob(
-  container: k8s.V1Container,
-  extension?: k8s.V1PodTemplateSpec
-): Promise<k8s.V1Job> {
-  const runnerInstanceLabel = new RunnerInstanceLabel()
-
-  const job = new k8s.V1Job()
-  job.apiVersion = 'batch/v1'
-  job.kind = 'Job'
-  job.metadata = new k8s.V1ObjectMeta()
-  job.metadata.name = getStepPodName()
-  job.metadata.labels = { [runnerInstanceLabel.key]: runnerInstanceLabel.value }
-  job.metadata.annotations = {}
-
-  job.spec = new k8s.V1JobSpec()
-  job.spec.ttlSecondsAfterFinished = 300
-  job.spec.backoffLimit = 0
-  job.spec.template = new k8s.V1PodTemplateSpec()
-
-  job.spec.template.spec = new k8s.V1PodSpec()
-  job.spec.template.metadata = new k8s.V1ObjectMeta()
-  job.spec.template.metadata.labels = {}
-  job.spec.template.metadata.annotations = {}
-  job.spec.template.spec.containers = [container]
-  job.spec.template.spec.restartPolicy = 'Never'
-
-  job.spec.template.spec.volumes = [
-    {
-      name: EXTERNALS_VOLUME_NAME,
-      emptyDir: {}
-    }
-  ]
-
-  if (extension) {
-    if (extension.metadata) {
-      // apply metadata both to the job and the pod created by the job
-      mergeObjectMeta(job, extension.metadata)
-      mergeObjectMeta(job.spec.template, extension.metadata)
-    }
-    if (extension.spec) {
-      mergePodSpecWithOptions(job.spec.template.spec, extension.spec)
-    }
-  }
-
-  return await k8sBatchV1Api.createNamespacedJob({
-    namespace: namespace(),
-    body: job
-  })
-}
-
-export async function getContainerJobPodName(jobName: string): Promise<string> {
-  const selector = `job-name=${jobName}`
-  const backOffManager = new BackOffManager(60)
-  while (true) {
-    const podList = await k8sApi.listNamespacedPod({
-      namespace: namespace(),
-      labelSelector: selector,
-      limit: 1
-    })
-
-    if (!podList.items?.length) {
-      await backOffManager.backOff()
-      continue
-    }
-
-    if (!podList.items[0].metadata?.name) {
-      throw new Error(
-        `Failed to determine the name of the pod for job ${jobName}`
-      )
-    }
-    return podList.items[0].metadata.name
-  }
 }
 
 export async function deletePod(name: string): Promise<void> {

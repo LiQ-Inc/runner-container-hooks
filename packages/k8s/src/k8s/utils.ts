@@ -22,7 +22,8 @@ export function containerVolumes(): k8s.V1VolumeMount[] {
   ]
 }
 
-export function writeEntryPointScript(
+export function writeScript(
+  baseDirectory: string,
   workingDirectory: string,
   entryPoint: string,
   entryPointArgs?: string[],
@@ -73,7 +74,7 @@ exec ${environmentPrefix} ${entryPoint} ${
   const entryPointPath = `${process.env.RUNNER_TEMP}/${filename}`
   fs.writeFileSync(entryPointPath, content)
   return {
-    containerPath: `/__w/_temp/${filename}`,
+    containerPath: `/${baseDirectory}/_temp/${filename}`,
     runnerPath: entryPointPath
   }
 }
