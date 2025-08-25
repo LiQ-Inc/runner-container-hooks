@@ -22,8 +22,7 @@ export function containerVolumes(): k8s.V1VolumeMount[] {
   ]
 }
 
-export function writeScript(
-  baseDirectory: string,
+export function writeRunScript(
   workingDirectory: string,
   entryPoint: string,
   entryPointArgs?: string[],
@@ -37,31 +36,8 @@ export function writeScript(
       typeof prependPath === 'string' ? prependPath : prependPath.join(':')
     exportPath = `export PATH=${prepend}:$PATH`
   }
-  let environmentPrefix = ''
 
-  if (environmentVariables && Object.entries(environmentVariables).length) {
-    const envBuffer: string[] = []
-    for (const [key, value] of Object.entries(environmentVariables)) {
-      if (
-        key.includes(`=`) ||
-        key.includes(`'`) ||
-        key.includes(`"`) ||
-        key.includes(`$`)
-      ) {
-        throw new Error(
-          `environment key ${key} is invalid - the key must not contain =, $, ', or "`
-        )
-      }
-      envBuffer.push(
-        `"${key}=${value
-          .replace(/\\/g, '\\\\')
-          .replace(/"/g, '\\"')
-          .replace(/\$/g, '\\$')
-          .replace(/`/g, '\\`')}"`
-      )
-    }
-    environmentPrefix = `env ${envBuffer.join(' ')} `
-  }
+  let environmentPrefix = scriptEnv(environmentVariables)
 
   const content = `#!/bin/sh -l
 ${exportPath}
@@ -74,9 +50,74 @@ exec ${environmentPrefix} ${entryPoint} ${
   const entryPointPath = `${process.env.RUNNER_TEMP}/${filename}`
   fs.writeFileSync(entryPointPath, content)
   return {
-    containerPath: `/${baseDirectory}/_temp/${filename}`,
+    containerPath: `/__w/_temp/${filename}`,
     runnerPath: entryPointPath
   }
+}
+
+export function writeContainerStepScript(
+  workingDirectory: string,
+  entryPoint: string,
+  entryPointArgs?: string[],
+  environmentVariables?: { [key: string]: string }
+): { containerPath: string; runnerPath: string } {
+  let environmentPrefix = scriptEnv(environmentVariables)
+
+  const parts = workingDirectory.split('/').slice(-2)
+  if (parts.length !== 2) {
+    throw new Error(`Invalid working directory: ${workingDirectory}`)
+  }
+
+  const content = `#!/bin/sh -l
+mkdir /github && \
+mv /__w/_temp/_github_home /github/home && \
+mv /__w/_temp/_github_workflow /github/workflow && \
+mv /__w/_temp/_runner_file_commands /github/file_commands && \
+mv /__w/_temp/${parts.join('/')}/ /github/workspace && \
+cd /github/workspace && \
+exec ${environmentPrefix} ${entryPoint} ${
+    entryPointArgs?.length ? entryPointArgs.join(' ') : ''
+  }
+`
+  const filename = `${uuidv4()}.sh`
+  const entryPointPath = `${process.env.RUNNER_TEMP}/${filename}`
+  fs.writeFileSync(entryPointPath, content)
+  return {
+    containerPath: `/__w/_temp/${filename}`,
+    runnerPath: entryPointPath
+  }
+}
+
+function scriptEnv(envs?: { [key: string]: string }): string {
+  if (!envs || !Object.entries(envs).length) {
+    return ''
+  }
+  const envBuffer: string[] = []
+  for (const [key, value] of Object.entries(envs)) {
+    if (
+      key.includes(`=`) ||
+      key.includes(`'`) ||
+      key.includes(`"`) ||
+      key.includes(`$`)
+    ) {
+      throw new Error(
+        `environment key ${key} is invalid - the key must not contain =, $, ', or "`
+      )
+    }
+    envBuffer.push(
+      `"${key}=${value
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/\$/g, '\\$')
+        .replace(/`/g, '\\`')}"`
+    )
+  }
+
+  if (!envBuffer?.length) {
+    return ''
+  }
+
+  return `env ${envBuffer.join(' ')} `
 }
 
 export function generateContainerName(image: string): string {

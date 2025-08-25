@@ -4,7 +4,7 @@ import * as k8s from '@kubernetes/client-node'
 import { RunContainerStepArgs } from 'hooklib'
 import { dirname } from 'path'
 import {
-  createPod,
+  createContainerStepPod,
   execCpToPod,
   execPodStep,
   getPrepareJobTimeoutSeconds,
@@ -15,9 +15,8 @@ import {
   mergeContainerWithOptions,
   PodPhase,
   readExtensionFromFile,
-  DEFAULT_CONTAINER_ENTRY_POINT,
   DEFAULT_CONTAINER_ENTRY_POINT_ARGS,
-  writeScript
+  writeContainerStepScript
 } from '../k8s/utils'
 import {
   getStepPodName,
@@ -46,7 +45,7 @@ export async function runContainerStep(
 
   let pod: k8s.V1Pod
   try {
-    pod = await createPod(getStepPodName(), container, [], undefined, extension)
+    pod = await createContainerStepPod(getStepPodName(), container, extension)
   } catch (err) {
     core.debug(`createJob failed: ${JSON.stringify(err)}`)
     const message = (err as any)?.response?.body?.message || err
@@ -60,32 +59,32 @@ export async function runContainerStep(
       )} to have correctly set the metadata.name`
     )
   }
-
-  const baseDir = '/github/workspace'
-  const { containerPath, runnerPath } = writeScript(
-    '/github/workspace',
-    '',
-    stepContainer.entryPoint || '',
-    stepContainer.entryPointArgs,
-    [],
-    envs
-  )
+  const podName = pod.metadata.name
 
   await waitForPodPhases(
-    pod.metadata.name,
+    podName,
     new Set([PodPhase.RUNNING]),
     new Set([PodPhase.PENDING, PodPhase.UNKNOWN]),
     getPrepareJobTimeoutSeconds()
   )
 
-  core.debug(
-    `Copying ${dirname(process.env.RUNNER_WORKSPACE as string)} to pod ${pod.metadata.name} at ${baseDir}`
+  if (!stepContainer.entryPoint) {
+    throw new Error(
+      'failed to start the container since the entrypoint is overwritten'
+    )
+  }
+
+  const { containerPath, runnerPath } = writeContainerStepScript(
+    stepContainer.workingDirectory,
+    stepContainer.entryPoint,
+    stepContainer.entryPointArgs,
+    envs
   )
-  await execCpToPod(
-    pod.metadata.name,
-    dirname(process.env.RUNNER_WORKSPACE as string),
-    baseDir
-  )
+
+  const workdir = dirname(process.env.RUNNER_WORKSPACE as string)
+  const containerTemp = '/__w/_temp'
+  const runnerTemp = `${workdir}/_temp`
+  await execCpToPod(podName, runnerTemp, containerTemp)
 
   try {
     return await execPodStep(
@@ -110,7 +109,7 @@ function createContainerSpec(
   podContainer.name = JOB_CONTAINER_NAME
   podContainer.image = container.image
   podContainer.workingDir = container.workingDirectory
-  podContainer.command = [DEFAULT_CONTAINER_ENTRY_POINT]
+  podContainer.command = ['/__e/tail']
   podContainer.args = DEFAULT_CONTAINER_ENTRY_POINT_ARGS
 
   podContainer.volumeMounts = containerVolumes()

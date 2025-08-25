@@ -3,7 +3,7 @@ import * as fs from 'fs'
 import * as core from '@actions/core'
 import { RunScriptStepArgs } from 'hooklib'
 import { execCpFromPod, execCpToPod, execPodStep } from '../k8s'
-import { writeScript, sleep, listDirAllCommand } from '../k8s/utils'
+import { writeRunScript, sleep, listDirAllCommand } from '../k8s/utils'
 import { JOB_CONTAINER_NAME } from './constants'
 import { dirname } from 'path'
 
@@ -14,8 +14,7 @@ export async function runScriptStep(
 ): Promise<void> {
   // Write the entrypoint first. This will be later coppied to the workflow pod
   const { entryPoint, entryPointArgs, environmentVariables } = args
-  const { containerPath, runnerPath } = writeScript(
-    "/__w",
+  const { containerPath, runnerPath } = writeRunScript(
     args.workingDirectory,
     entryPoint,
     entryPointArgs,

@@ -57,7 +57,7 @@ export const requiredPermissions = [
   }
 ]
 
-export async function createPod(
+export async function createJobPod(
   name: string,
   jobContainer?: k8s.V1Container,
   services?: k8s.V1Container[],
@@ -131,6 +131,78 @@ export async function createPod(
     secretReference.name = secret.metadata.name
     appPod.spec.imagePullSecrets = [secretReference]
   }
+
+  if (extension?.metadata) {
+    mergeObjectMeta(appPod, extension.metadata)
+  }
+
+  if (extension?.spec) {
+    mergePodSpecWithOptions(appPod.spec, extension.spec)
+  }
+
+  return await k8sApi.createNamespacedPod({
+    namespace: namespace(),
+    body: appPod
+  })
+}
+
+export async function createContainerStepPod(
+  name: string,
+  container: k8s.V1Container,
+  extension?: k8s.V1PodTemplateSpec
+): Promise<k8s.V1Pod> {
+  const appPod = new k8s.V1Pod()
+
+  appPod.apiVersion = 'v1'
+  appPod.kind = 'Pod'
+
+  appPod.metadata = new k8s.V1ObjectMeta()
+  appPod.metadata.name = name
+
+  const instanceLabel = new RunnerInstanceLabel()
+  appPod.metadata.labels = {
+    [instanceLabel.key]: instanceLabel.value
+  }
+  appPod.metadata.annotations = {}
+
+  appPod.spec = new k8s.V1PodSpec()
+  appPod.spec.containers = [container]
+  appPod.spec.initContainers = [
+    {
+      name: 'fs-init',
+      image:
+        process.env.ACTIONS_RUNNER_IMAGE ||
+        'ghcr.io/actions/actions-runner:latest',
+      command: [
+        'bash',
+        '-c',
+        `sudo cp $(which sh) /mnt/externals/sh \
+        && sudo cp $(which tail) /mnt/externals/tail \
+        && sudo cp $(which env) /mnt/externals/env \
+        && sudo chmod -R 777 /mnt/externals`
+      ],
+      securityContext: {
+        runAsGroup: 1001,
+        runAsUser: 1001,
+        privileged: true
+      },
+      volumeMounts: [
+        {
+          name: EXTERNALS_VOLUME_NAME,
+          mountPath: '/mnt/externals'
+        }
+      ]
+    }
+  ]
+
+  appPod.spec.restartPolicy = 'Never'
+
+  appPod.spec.volumes = [
+    {
+      name: EXTERNALS_VOLUME_NAME,
+      emptyDir: {}
+    }
+  ]
 
   if (extension?.metadata) {
     mergeObjectMeta(appPod, extension.metadata)

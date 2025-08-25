@@ -9,7 +9,7 @@ import {
 } from 'hooklib'
 import {
   containerPorts,
-  createPod,
+  createJobPod,
   isPodContainerAlpine,
   prunePods,
   waitForPodPhases,
@@ -26,7 +26,11 @@ import {
   PodPhase,
   fixArgs
 } from '../k8s/utils'
-import { CONTAINER_EXTENSION_PREFIX, getJobPodName, JOB_CONTAINER_NAME } from './constants'
+import {
+  CONTAINER_EXTENSION_PREFIX,
+  getJobPodName,
+  JOB_CONTAINER_NAME
+} from './constants'
 import { dirname } from 'path'
 
 export async function prepareJob(
@@ -71,7 +75,7 @@ export async function prepareJob(
 
   let createdPod: k8s.V1Pod | undefined = undefined
   try {
-    createdPod = await createPod(
+    createdPod = await createJobPod(
       getJobPodName(),
       container,
       services,
