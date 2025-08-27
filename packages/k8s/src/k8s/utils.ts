@@ -73,7 +73,7 @@ mkdir /github && \
 mv /__w/_temp/_github_home /github/home && \
 mv /__w/_temp/_github_workflow /github/workflow && \
 mv /__w/_temp/_runner_file_commands /github/file_commands && \
-mv /__w/_temp/${parts.join('/')}/ /github/workspace && \
+mv /__w/${parts.join('/')}/ /github/workspace && \
 cd /github/workspace && \
 exec ${environmentPrefix} ${entryPoint} ${
     entryPointArgs?.length ? entryPointArgs.join(' ') : ''
@@ -81,6 +81,7 @@ exec ${environmentPrefix} ${entryPoint} ${
 `
   const filename = `${uuidv4()}.sh`
   const entryPointPath = `${process.env.RUNNER_TEMP}/${filename}`
+  core.debug(`Writing container step script to ${entryPointPath}`)
   fs.writeFileSync(entryPointPath, content)
   return {
     containerPath: `/__w/_temp/${filename}`,

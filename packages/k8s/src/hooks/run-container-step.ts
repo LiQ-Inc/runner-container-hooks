@@ -31,7 +31,12 @@ export async function runContainerStep(
     throw new Error('Building container actions is not currently supported')
   }
 
-  let secretName: string | undefined = undefined
+  if (!stepContainer.entryPoint) {
+    throw new Error(
+      'failed to start the container since the entrypoint is overwritten'
+    )
+  }
+
   const envs = stepContainer.environmentVariables || {}
   envs['GITHUB_ACTIONS'] = 'true'
   if (!('CI' in envs)) {
@@ -40,7 +45,6 @@ export async function runContainerStep(
 
   const extension = readExtensionFromFile()
 
-  core.debug(`Created secret ${secretName} for container job envs`)
   const container = createContainerSpec(stepContainer, extension)
 
   let pod: k8s.V1Pod
@@ -68,27 +72,23 @@ export async function runContainerStep(
     getPrepareJobTimeoutSeconds()
   )
 
-  if (!stepContainer.entryPoint) {
-    throw new Error(
-      'failed to start the container since the entrypoint is overwritten'
-    )
-  }
-
   const { containerPath, runnerPath } = writeContainerStepScript(
-    stepContainer.workingDirectory,
+    process.env.GITHUB_WORKSPACE as string,
     stepContainer.entryPoint,
     stepContainer.entryPointArgs,
     envs
   )
 
-  const workdir = dirname(process.env.RUNNER_WORKSPACE as string)
-  const containerTemp = '/__w/_temp'
-  const runnerTemp = `${workdir}/_temp`
-  await execCpToPod(podName, runnerTemp, containerTemp)
+  await execCpToPod(
+    podName,
+    dirname(process.env.RUNNER_WORKSPACE as string),
+    '/__w'
+  )
 
   try {
+    core.debug(`Executing container step script in pod ${podName}`)
     return await execPodStep(
-      ['sh', '-e', containerPath],
+      ['/__e/sh', '-e', containerPath],
       pod.metadata.name,
       JOB_CONTAINER_NAME
     )
@@ -108,7 +108,7 @@ function createContainerSpec(
   const podContainer = new k8s.V1Container()
   podContainer.name = JOB_CONTAINER_NAME
   podContainer.image = container.image
-  podContainer.workingDir = container.workingDirectory
+  podContainer.workingDir = '/__w'
   podContainer.command = ['/__e/tail']
   podContainer.args = DEFAULT_CONTAINER_ENTRY_POINT_ARGS
 
