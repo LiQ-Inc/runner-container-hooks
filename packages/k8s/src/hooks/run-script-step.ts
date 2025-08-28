@@ -42,12 +42,14 @@ export async function runScriptStep(
     throw new Error(`failed to run script step: ${message}`)
   }
 
+  fs.rmSync(runnerPath, { recursive: true, force: true })
+
   try {
+    core.debug(
+      `Copying from job pod '${state.jobPod}' ${containerTemp} to ${runnerTemp}`
+    )
     await execCpFromPod(state.jobPod, containerTemp, runnerTemp)
   } catch (error) {
     core.warning('Failed to copy _temp from pod')
-  } finally {
-    // remove entire temp dir because it will be copied in the next step again
-    fs.rmSync(runnerPath, { recursive: true, force: true })
-  }
+  } 
 }

@@ -5,6 +5,7 @@ import { RunContainerStepArgs } from 'hooklib'
 import { dirname } from 'path'
 import {
   createContainerStepPod,
+  execCpFromPod,
   execCpToPod,
   execPodStep,
   getPrepareJobTimeoutSeconds,
@@ -16,9 +17,10 @@ import {
   PodPhase,
   readExtensionFromFile,
   DEFAULT_CONTAINER_ENTRY_POINT_ARGS,
-  writeContainerStepScript
+  writeContainerStepScript,
 } from '../k8s/utils'
 import {
+  getJobPodName,
   getStepPodName,
   JOB_CONTAINER_EXTENSION_NAME,
   JOB_CONTAINER_NAME
@@ -71,19 +73,31 @@ export async function runContainerStep(
     new Set([PodPhase.PENDING, PodPhase.UNKNOWN]),
     getPrepareJobTimeoutSeconds()
   )
+  
+
+  const runnerWorkspace = dirname(process.env.RUNNER_WORKSPACE as string)
+  const githubWorkspace = process.env.GITHUB_WORKSPACE as string
+  const parts = githubWorkspace.split('/').slice(-2)
+  if (parts.length !== 2) {
+    throw new Error(`Invalid github workspace directory: ${githubWorkspace}`)
+  }
+  const relativeWorkspace = parts.join('/')
+
+  core.debug(`Copying files from pod ${getJobPodName()} to ${runnerWorkspace}/${relativeWorkspace}`)
+  await execCpFromPod(
+    getJobPodName(),
+    `/__w/${relativeWorkspace}`,
+    `${runnerWorkspace}/${relativeWorkspace}`
+  )
 
   const { containerPath, runnerPath } = writeContainerStepScript(
-    process.env.GITHUB_WORKSPACE as string,
+    githubWorkspace,
     stepContainer.entryPoint,
     stepContainer.entryPointArgs,
     envs
   )
 
-  await execCpToPod(
-    podName,
-    dirname(process.env.RUNNER_WORKSPACE as string),
-    '/__w'
-  )
+  await execCpToPod(podName, runnerWorkspace, '/__w')
 
   try {
     core.debug(`Executing container step script in pod ${podName}`)

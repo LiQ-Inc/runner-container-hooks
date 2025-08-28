@@ -1,7 +1,9 @@
 import * as core from '@actions/core'
 import { spawn } from 'child_process'
 import * as k8s from '@kubernetes/client-node'
+import tar from 'tar-fs'
 import * as stream from 'stream'
+import { WritableStreamBuffer } from 'stream-buffers'
 import { createHash } from 'crypto'
 import type { ContainerInfo, Registry } from 'hooklib'
 import {
@@ -395,14 +397,69 @@ export async function execCpFromPod(
   containerPath: string,
   runnerPath: string
 ): Promise<void> {
-  const cp = new k8s.Cp(kc)
-  await cp.cpFromPod(
-    namespace(),
-    podName,
-    JOB_CONTAINER_NAME,
-    containerPath,
-    runnerPath
-  )
+  core.debug(`Copying from pod ${podName} ${containerPath} to ${runnerPath}`)
+  const want = await execCalculateOutputHash(podName, JOB_CONTAINER_NAME, [
+    'sh',
+    '-c',
+    listDirAllCommand(containerPath)
+  ])
+  // make temporary directory
+  const exec = new k8s.Exec(kc)
+  const containerPaths = containerPath.split('/')
+  const dirname = containerPaths.pop() as string
+  const command = ['tar', 'cf', '-', '-C', containerPaths.join('/'), dirname]
+  const writerStream = tar.extract(runnerPath)
+  const errStream = new WritableStreamBuffer()
+
+  await new Promise((resolve, reject) => {
+    exec
+      .exec(
+        namespace(),
+        podName,
+        JOB_CONTAINER_NAME,
+        command,
+        writerStream,
+        errStream,
+        null,
+        false,
+        async status => {
+          if (errStream.size()) {
+            reject(
+              new Error(
+                `Error from cpFromPod - details: \n ${errStream.getContentsAsString()}`
+              )
+            )
+          }
+          resolve(status)
+        }
+      )
+      .catch(e => reject(e))
+  })
+
+  let attempts = 10
+  const delay = 1000
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const got = await localCalculateOutputHash([
+        'sh',
+        '-c',
+        listDirAllCommand(runnerPath)
+      ])
+
+      if (got !== want) {
+        core.debug(
+          `The hash of the directory does not match the expected value; want='${want}' got='${got}'`
+        )
+        await sleep(delay)
+        continue
+      }
+
+      break
+    } catch (error) {
+      core.debug(`Attempt ${i + 1} failed: ${error}`)
+      await sleep(delay)
+    }
+  }
 }
 
 export async function waitForJobToComplete(jobName: string): Promise<void> {
