@@ -56,6 +56,7 @@ exec ${environmentPrefix} ${entryPoint} ${
 }
 
 export function writeContainerStepScript(
+  dst: string,
   workingDirectory: string,
   entryPoint: string,
   entryPointArgs?: string[],
@@ -80,7 +81,7 @@ exec ${environmentPrefix} ${entryPoint} ${
   }
 `
   const filename = `${uuidv4()}.sh`
-  const entryPointPath = `${process.env.RUNNER_TEMP}/${filename}`
+  const entryPointPath = `${dst}/${filename}`
   core.debug(`Writing container step script to ${entryPointPath}`)
   fs.writeFileSync(entryPointPath, content)
   return {

@@ -18,6 +18,7 @@ import {
   readExtensionFromFile,
   DEFAULT_CONTAINER_ENTRY_POINT_ARGS,
   writeContainerStepScript,
+  sleep
 } from '../k8s/utils'
 import {
   getJobPodName,
@@ -73,7 +74,6 @@ export async function runContainerStep(
     new Set([PodPhase.PENDING, PodPhase.UNKNOWN]),
     getPrepareJobTimeoutSeconds()
   )
-  
 
   const runnerWorkspace = dirname(process.env.RUNNER_WORKSPACE as string)
   const githubWorkspace = process.env.GITHUB_WORKSPACE as string
@@ -83,21 +83,24 @@ export async function runContainerStep(
   }
   const relativeWorkspace = parts.join('/')
 
-  core.debug(`Copying files from pod ${getJobPodName()} to ${runnerWorkspace}/${relativeWorkspace}`)
-  await execCpFromPod(
-    getJobPodName(),
-    `/__w`,
-    `${runnerWorkspace}`
+  core.debug(
+    `Copying files from pod ${getJobPodName()} to ${runnerWorkspace}/${relativeWorkspace}`
   )
+  await execCpFromPod(getJobPodName(), `/__w`, `${runnerWorkspace}`)
 
   const { containerPath, runnerPath } = writeContainerStepScript(
+    `${runnerWorkspace}/__w/_temp`,
     githubWorkspace,
     stepContainer.entryPoint,
     stepContainer.entryPointArgs,
     envs
   )
 
-  await execCpToPod(podName, runnerWorkspace, '/__w')
+  await execCpToPod(podName, `${runnerWorkspace}/__w`, '/__w')
+
+  fs.rmSync(`${runnerWorkspace}/__w`, { recursive: true, force: true })
+
+  await sleep(120000)
 
   try {
     core.debug(`Executing container step script in pod ${podName}`)
