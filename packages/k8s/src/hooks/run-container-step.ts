@@ -86,8 +86,8 @@ export async function runContainerStep(
   core.debug(`Copying files from pod ${getJobPodName()} to ${runnerWorkspace}/${relativeWorkspace}`)
   await execCpFromPod(
     getJobPodName(),
-    `/__w/${relativeWorkspace}`,
-    `${runnerWorkspace}/${relativeWorkspace}`
+    `/__w`,
+    `${runnerWorkspace}`
   )
 
   const { containerPath, runnerPath } = writeContainerStepScript(

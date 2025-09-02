@@ -27,6 +27,8 @@ export async function runScriptStep(
   const runnerTemp = `${workdir}/_temp`
   await execCpToPod(state.jobPod, runnerTemp, containerTemp)
 
+  console.log('Sleeping 90s after exec cp to pod')
+
   // Execute the entrypoint script
   args.entryPoint = 'sh'
   args.entryPointArgs = ['-e', containerPath]
@@ -40,16 +42,23 @@ export async function runScriptStep(
     core.debug(`execPodStep failed: ${JSON.stringify(err)}`)
     const message = (err as any)?.response?.body?.message || err
     throw new Error(`failed to run script step: ${message}`)
+  } finally {
+    core.debug('Cleaning up container temp directory')
+    try {
+      fs.rmSync(containerPath)
+    } catch (error) {
+      core.debug(
+        `Failed to remove container temp script: ${error}; continuing execution`
+      )
+    }
   }
-
-  fs.rmSync(runnerPath, { recursive: true, force: true })
 
   try {
     core.debug(
       `Copying from job pod '${state.jobPod}' ${containerTemp} to ${runnerTemp}`
     )
-    await execCpFromPod(state.jobPod, containerTemp, runnerTemp)
+    await execCpFromPod(state.jobPod, containerTemp, workdir)
   } catch (error) {
     core.warning('Failed to copy _temp from pod')
-  } 
+  }
 }

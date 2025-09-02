@@ -1,4 +1,5 @@
 import * as core from '@actions/core'
+import * as path from 'path'
 import { spawn } from 'child_process'
 import * as k8s from '@kubernetes/client-node'
 import tar from 'tar-fs'
@@ -318,6 +319,7 @@ export async function execCalculateOutputHash(
 
   // finalize hash and return digest
   hashWriter.end()
+
   return hash.digest('hex')
 }
 
@@ -395,9 +397,12 @@ export async function execCpToPod(
 export async function execCpFromPod(
   podName: string,
   containerPath: string,
-  runnerPath: string
+  parentRunnerPath: string
 ): Promise<void> {
-  core.debug(`Copying from pod ${podName} ${containerPath} to ${runnerPath}`)
+  const targetRunnerPath = `${parentRunnerPath}/${path.basename(containerPath)}`
+  core.debug(
+    `Copying from pod ${podName} ${containerPath} to ${targetRunnerPath}`
+  )
   const want = await execCalculateOutputHash(podName, JOB_CONTAINER_NAME, [
     'sh',
     '-c',
@@ -407,8 +412,15 @@ export async function execCpFromPod(
   const exec = new k8s.Exec(kc)
   const containerPaths = containerPath.split('/')
   const dirname = containerPaths.pop() as string
-  const command = ['tar', 'cf', '-', '-C', containerPaths.join('/'), dirname]
-  const writerStream = tar.extract(runnerPath)
+  const command = [
+    'tar',
+    'cf',
+    '-',
+    '-C',
+    containerPaths.join('/') || '/',
+    dirname
+  ]
+  const writerStream = tar.extract(parentRunnerPath)
   const errStream = new WritableStreamBuffer()
 
   await new Promise((resolve, reject) => {
@@ -443,7 +455,7 @@ export async function execCpFromPod(
       const got = await localCalculateOutputHash([
         'sh',
         '-c',
-        listDirAllCommand(runnerPath)
+        listDirAllCommand(targetRunnerPath)
       ])
 
       if (got !== want) {
