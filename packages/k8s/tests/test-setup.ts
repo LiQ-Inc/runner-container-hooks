@@ -37,7 +37,6 @@ export class TestHelper {
 
     await this.cleanupK8sResources()
     try {
-      await this.createTestVolume()
       await this.createTestJobPod()
     } catch (e) {
       console.log(e)
@@ -55,32 +54,15 @@ export class TestHelper {
 
   async cleanupK8sResources(): Promise<void> {
     await k8sApi
-      .deleteNamespacedPersistentVolumeClaim({
-        name: `${this.podName}-work`,
-        namespace: 'default',
-        gracePeriodSeconds: 0
-      })
-      .catch(e => {
-        console.error(e)
-      })
-    await k8sApi
-      .deletePersistentVolume({ name: `${this.podName}-pv` })
-      .catch(e => {
-        console.error(e)
-      })
-    await k8sStorageApi
-      .deleteStorageClass({ name: 'local-storage' })
-      .catch(e => {
-        console.error(e)
-      })
-    await k8sApi
       .deleteNamespacedPod({
         name: this.podName,
         namespace: 'default',
         gracePeriodSeconds: 0
       })
-      .catch(e => {
-        console.error(e)
+      .catch((e: k8s.ApiException<any>) => {
+        if (e.code !== 404) {
+          console.error(JSON.stringify(e))
+        }
       })
     await k8sApi
       .deleteNamespacedPod({
@@ -88,8 +70,10 @@ export class TestHelper {
         namespace: 'default',
         gracePeriodSeconds: 0
       })
-      .catch(e => {
-        console.error(e)
+      .catch((e: k8s.ApiException<any>) => {
+        if (e.code !== 404) {
+          console.error(JSON.stringify(e))
+        }
       })
   }
   createFile(fileName?: string): string {
@@ -120,55 +104,6 @@ export class TestHelper {
       }
     } as k8s.V1Pod
     await k8sApi.createNamespacedPod({ namespace: 'default', body: pod })
-  }
-
-  async createTestVolume(): Promise<void> {
-    var sc: k8s.V1StorageClass = {
-      metadata: {
-        name: 'local-storage'
-      },
-      provisioner: 'kubernetes.io/no-provisioner',
-      volumeBindingMode: 'Immediate'
-    }
-    await k8sStorageApi.createStorageClass({ body: sc })
-
-    var volume: k8s.V1PersistentVolume = {
-      metadata: {
-        name: `${this.podName}-pv`
-      },
-      spec: {
-        storageClassName: 'local-storage',
-        capacity: {
-          storage: '2Gi'
-        },
-        volumeMode: 'Filesystem',
-        accessModes: ['ReadWriteOnce'],
-        hostPath: {
-          path: `${this.tempDirPath}/_work`
-        }
-      }
-    }
-    await k8sApi.createPersistentVolume({ body: volume })
-    var volumeClaim: k8s.V1PersistentVolumeClaim = {
-      metadata: {
-        name: `${this.podName}-work`
-      },
-      spec: {
-        accessModes: ['ReadWriteOnce'],
-        volumeMode: 'Filesystem',
-        storageClassName: 'local-storage',
-        volumeName: `${this.podName}-pv`,
-        resources: {
-          requests: {
-            storage: '1Gi'
-          }
-        }
-      }
-    }
-    await k8sApi.createNamespacedPersistentVolumeClaim({
-      namespace: 'default',
-      body: volumeClaim
-    })
   }
 
   getPrepareJobDefinition(): HookData {
