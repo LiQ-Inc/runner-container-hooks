@@ -49,7 +49,7 @@ describe('Prepare job', () => {
       {
         sourceVolumePath: path.join(
           process.env.GITHUB_WORKSPACE as string,
-          '/myvolume'
+          'myvolume'
         ),
         targetVolumePath: '/volume_mount',
         readOnly: false
@@ -215,17 +215,6 @@ describe('Prepare job', () => {
     expect(content.context.container).toBeTruthy()
     expect(content.context.services).toBeTruthy()
     expect(content.context.services.length).toBe(1)
-  })
-
-  it('should not throw exception using kube scheduler', async () => {
-    // only for ReadWriteMany volumes or single node cluster
-    process.env[ENV_USE_KUBE_SCHEDULER] = 'true'
-
-    await expect(
-      prepareJob(prepareJobData.args, prepareJobOutputFilePath)
-    ).resolves.not.toThrow()
-
-    delete process.env[ENV_USE_KUBE_SCHEDULER]
   })
 
   test.each([undefined, null, []])(

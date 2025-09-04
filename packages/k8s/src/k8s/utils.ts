@@ -2,10 +2,12 @@ import * as k8s from '@kubernetes/client-node'
 import * as fs from 'fs'
 import * as yaml from 'js-yaml'
 import * as core from '@actions/core'
+import { dirname } from 'path'
 import { v1 as uuidv4 } from 'uuid'
 import { EXTERNALS_VOLUME_NAME } from './index'
 import { CONTAINER_EXTENSION_PREFIX } from '../hooks/constants'
 import * as shlex from 'shlex'
+import { Mount } from 'hooklib'
 
 export const DEFAULT_CONTAINER_ENTRY_POINT_ARGS = [`-f`, `/dev/null`]
 export const DEFAULT_CONTAINER_ENTRY_POINT = 'tail'
@@ -20,6 +22,27 @@ export function containerVolumes(): k8s.V1VolumeMount[] {
       mountPath: '/__e'
     }
   ]
+}
+
+export function prepareJobScript(userVolumeMounts: Mount[]): {
+  containerPath: string
+  runnerPath: string
+} {
+  let mountDirs = userVolumeMounts
+    .map(m => dirname(m.targetVolumePath))
+    .join(' ')
+
+  const content = `#!/bin/sh -l
+mkdir -p ${mountDirs}
+`
+
+  const filename = `${uuidv4()}.sh`
+  const entryPointPath = `${process.env.RUNNER_TEMP}/${filename}`
+  fs.writeFileSync(entryPointPath, content)
+  return {
+    containerPath: `/__w/_temp/${filename}`,
+    runnerPath: entryPointPath
+  }
 }
 
 export function writeRunScript(

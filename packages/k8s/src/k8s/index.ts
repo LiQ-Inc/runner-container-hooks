@@ -356,14 +356,34 @@ export async function execCpToPod(
   let attempt = 0
   while (true) {
     try {
-      const cp = new k8s.Cp(kc)
-      await cp.cpToPod(
-        namespace(),
-        podName,
-        JOB_CONTAINER_NAME,
-        runnerPath,
-        containerPath
-      )
+      const exec = new k8s.Exec(kc)
+      const command = ['tar', 'xf', '-', '-C', containerPath]
+      const readStream = tar.pack(runnerPath)
+      const errStream = new WritableStreamBuffer()
+      await new Promise((resolve, reject) => {
+        exec
+          .exec(
+            namespace(),
+            podName,
+            JOB_CONTAINER_NAME,
+            command,
+            null,
+            errStream,
+            readStream,
+            false,
+            async status => {
+              if (errStream.size()) {
+                reject(
+                  new Error(
+                    `Error from cpFromPod - details: \n ${errStream.getContentsAsString()}`
+                  )
+                )
+              }
+              resolve(status)
+            }
+          )
+          .catch(e => reject(e))
+      })
       break
     } catch (error) {
       core.debug(`cpToPod: Attempt ${attempt + 1} failed: ${error}`)

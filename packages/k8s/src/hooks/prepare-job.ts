@@ -14,7 +14,8 @@ import {
   prunePods,
   waitForPodPhases,
   getPrepareJobTimeoutSeconds,
-  execCpToPod
+  execCpToPod,
+  execPodStep
 } from '../k8s'
 import {
   containerVolumes,
@@ -24,14 +25,15 @@ import {
   mergeContainerWithOptions,
   readExtensionFromFile,
   PodPhase,
-  fixArgs
+  fixArgs,
+  prepareJobScript
 } from '../k8s/utils'
 import {
   CONTAINER_EXTENSION_PREFIX,
   getJobPodName,
   JOB_CONTAINER_NAME
 } from './constants'
-import { dirname } from 'path'
+import { dirname, isAbsolute } from 'path'
 
 export async function prepareJob(
   args: PrepareJobArgs,
@@ -108,11 +110,24 @@ export async function prepareJob(
     throw new Error(`pod failed to come online with error: ${err}`)
   }
 
+  let prepareScript: { containerPath: string; runnerPath: string } | undefined
+  if (args.container?.userMountVolumes?.length) {
+    prepareScript = prepareJobScript(args.container.userMountVolumes || [])
+  }
+
   await execCpToPod(
     createdPod.metadata.name,
     dirname(process.env.RUNNER_WORKSPACE as string),
     '/__w'
   )
+
+  if (prepareScript) {
+    await execPodStep(
+      ['sh', '-e', prepareScript.containerPath],
+      createdPod.metadata.name,
+      JOB_CONTAINER_NAME
+    )
+  }
 
   core.debug('Job pod is ready for traffic')
 
@@ -205,6 +220,21 @@ export function createContainerSpec(
     container.entryPointArgs = DEFAULT_CONTAINER_ENTRY_POINT_ARGS
   }
 
+  const githubWorkspace = process.env.GITHUB_WORKSPACE as string
+  if (container.userMountVolumes?.length) {
+    for (const userVolume of container.userMountVolumes) {
+      if (
+        jobContainer &&
+        isAbsolute(userVolume.sourceVolumePath) &&
+        !userVolume.sourceVolumePath.startsWith(githubWorkspace)
+      ) {
+        throw new Error(
+          `Volume mount '${userVolume.sourceVolumePath}' outside of the work folder '${githubWorkspace}' are not supported`
+        )
+      }
+    }
+  }
+
   const podContainer = {
     name,
     image: container.image,
@@ -243,7 +273,6 @@ export function createContainerSpec(
     })
   }
 
-  // TODO: handle user volume mounts
   podContainer.volumeMounts = containerVolumes()
 
   if (!extension) {

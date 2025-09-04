@@ -5,7 +5,7 @@ metadata:
     labeled-by: "extension"
 spec:
   securityContext:
-    runAsUser: 1000
+    runAsUser: 1001
     runAsGroup: 3000
   restartPolicy: Never
   containers:
