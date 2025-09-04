@@ -353,14 +353,29 @@ export async function execCpToPod(
 ): Promise<void> {
   core.debug(`Copying ${runnerPath} to pod ${podName} at ${containerPath}`)
 
-  const cp = new k8s.Cp(kc)
-  await cp.cpToPod(
-    namespace(),
-    podName,
-    JOB_CONTAINER_NAME,
-    runnerPath,
-    containerPath
-  )
+  let attempt = 0
+  while (true) {
+    try {
+      const cp = new k8s.Cp(kc)
+      await cp.cpToPod(
+        namespace(),
+        podName,
+        JOB_CONTAINER_NAME,
+        runnerPath,
+        containerPath
+      )
+      break
+    } catch (error) {
+      core.debug(`cpToPod: Attempt ${attempt + 1} failed: ${error}`)
+      attempt++
+      if (attempt >= 30) {
+        throw new Error(
+          `cpToPod failed after ${attempt} attempts: ${JSON.stringify(error)}`
+        )
+      }
+      await sleep(1000)
+    }
+  }
 
   const want = await localCalculateOutputHash([
     'sh',
@@ -368,7 +383,7 @@ export async function execCpToPod(
     listDirAllCommand(runnerPath)
   ])
 
-  let attempts = 10
+  let attempts = 15
   const delay = 1000
   for (let i = 0; i < attempts; i++) {
     try {
@@ -408,47 +423,63 @@ export async function execCpFromPod(
     '-c',
     listDirAllCommand(containerPath)
   ])
-  // make temporary directory
-  const exec = new k8s.Exec(kc)
-  const containerPaths = containerPath.split('/')
-  const dirname = containerPaths.pop() as string
-  const command = [
-    'tar',
-    'cf',
-    '-',
-    '-C',
-    containerPaths.join('/') || '/',
-    dirname
-  ]
-  const writerStream = tar.extract(parentRunnerPath)
-  const errStream = new WritableStreamBuffer()
 
-  await new Promise((resolve, reject) => {
-    exec
-      .exec(
-        namespace(),
-        podName,
-        JOB_CONTAINER_NAME,
-        command,
-        writerStream,
-        errStream,
-        null,
-        false,
-        async status => {
-          if (errStream.size()) {
-            reject(
-              new Error(
-                `Error from cpFromPod - details: \n ${errStream.getContentsAsString()}`
-              )
-            )
-          }
-          resolve(status)
-        }
-      )
-      .catch(e => reject(e))
-  })
+  let attempt = 0
+  while (true) {
+    try {
+      // make temporary directory
+      const exec = new k8s.Exec(kc)
+      const containerPaths = containerPath.split('/')
+      const dirname = containerPaths.pop() as string
+      const command = [
+        'tar',
+        'cf',
+        '-',
+        '-C',
+        containerPaths.join('/') || '/',
+        dirname
+      ]
+      const writerStream = tar.extract(parentRunnerPath)
+      const errStream = new WritableStreamBuffer()
 
-  let attempts = 10
+      await new Promise((resolve, reject) => {
+        exec
+          .exec(
+            namespace(),
+            podName,
+            JOB_CONTAINER_NAME,
+            command,
+            writerStream,
+            errStream,
+            null,
+            false,
+            async status => {
+              if (errStream.size()) {
+                reject(
+                  new Error(
+                    `Error from cpFromPod - details: \n ${errStream.getContentsAsString()}`
+                  )
+                )
+              }
+              resolve(status)
+            }
+          )
+          .catch(e => reject(e))
+      })
+      break
+    } catch (error) {
+      core.debug(`Attempt ${attempt + 1} failed: ${error}`)
+      attempt++
+      if (attempt >= 30) {
+        throw new Error(
+          `execCpFromPod failed after ${attempt} attempts: ${JSON.stringify(error)}`
+        )
+      }
+      await sleep(1000)
+    }
+  }
+
+  let attempts = 15
   const delay = 1000
   for (let i = 0; i < attempts; i++) {
     try {
