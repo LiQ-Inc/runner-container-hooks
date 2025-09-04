@@ -18,7 +18,6 @@ import {
   readExtensionFromFile,
   DEFAULT_CONTAINER_ENTRY_POINT_ARGS,
   writeContainerStepScript,
-  sleep
 } from '../k8s/utils'
 import {
   getJobPodName,
@@ -99,8 +98,6 @@ export async function runContainerStep(
   await execCpToPod(podName, `${runnerWorkspace}/__w`, '/__w')
 
   fs.rmSync(`${runnerWorkspace}/__w`, { recursive: true, force: true })
-
-  await sleep(120000)
 
   try {
     core.debug(`Executing container step script in pod ${podName}`)

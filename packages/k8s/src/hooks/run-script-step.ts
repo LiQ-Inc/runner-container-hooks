@@ -27,8 +27,6 @@ export async function runScriptStep(
   const runnerTemp = `${workdir}/_temp`
   await execCpToPod(state.jobPod, runnerTemp, containerTemp)
 
-  console.log('Sleeping 90s after exec cp to pod')
-
   // Execute the entrypoint script
   args.entryPoint = 'sh'
   args.entryPointArgs = ['-e', containerPath]
