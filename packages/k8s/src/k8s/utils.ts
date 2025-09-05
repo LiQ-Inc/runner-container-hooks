@@ -4,7 +4,7 @@ import * as yaml from 'js-yaml'
 import * as core from '@actions/core'
 import { dirname } from 'path'
 import { v1 as uuidv4 } from 'uuid'
-import { EXTERNALS_VOLUME_NAME } from './index'
+import { EXTERNALS_VOLUME_NAME, GITHUB_VOLUME_NAME } from './index'
 import { CONTAINER_EXTENSION_PREFIX } from '../hooks/constants'
 import * as shlex from 'shlex'
 import { Mount } from 'hooklib'
@@ -20,11 +20,17 @@ export function containerVolumes(): k8s.V1VolumeMount[] {
     {
       name: EXTERNALS_VOLUME_NAME,
       mountPath: '/__e'
+    },
+    {
+      name: GITHUB_VOLUME_NAME,
+      mountPath: '/github'
     }
   ]
 }
 
-export function prepareJobScript(userVolumeMounts: Mount[]): {
+export function prepareJobScript(
+  userVolumeMounts: Mount[]
+): {
   containerPath: string
   runnerPath: string
 } {
@@ -33,6 +39,9 @@ export function prepareJobScript(userVolumeMounts: Mount[]): {
     .join(' ')
 
   const content = `#!/bin/sh -l
+set -e
+cp -R /__w/_temp/_github_home /github/home
+cp -R /__w/_temp/_github_workflow /github/workflow
 mkdir -p ${mountDirs}
 `
 
@@ -63,6 +72,7 @@ export function writeRunScript(
   let environmentPrefix = scriptEnv(environmentVariables)
 
   const content = `#!/bin/sh -l
+set -e
 ${exportPath}
 cd ${workingDirectory} && \
 exec ${environmentPrefix} ${entryPoint} ${

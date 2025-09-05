@@ -5,7 +5,6 @@ import { createContainerSpec, prepareJob } from '../src/hooks/prepare-job'
 import { TestHelper } from './test-setup'
 import {
   ENV_HOOK_TEMPLATE_PATH,
-  ENV_USE_KUBE_SCHEDULER,
   generateContainerName
 } from '../src/k8s/utils'
 import { getPodByName } from '../src/k8s'
@@ -45,6 +44,7 @@ describe('Prepare job', () => {
   })
 
   it('should prepare job with absolute path for userVolumeMount', async () => {
+    fs.mkdirSync(path.join(process.env.GITHUB_WORKSPACE as string, 'myvolume'))
     prepareJobData.args.container.userMountVolumes = [
       {
         sourceVolumePath: path.join(
@@ -108,19 +108,6 @@ describe('Prepare job', () => {
     )
   })
 
-  it('should throw an exception if the user volume mount is absolute path outside of GITHUB_WORKSPACE', async () => {
-    prepareJobData.args.container.userMountVolumes = [
-      {
-        sourceVolumePath: '/somewhere/not/in/gh-workspace',
-        targetVolumePath: '/containermount',
-        readOnly: false
-      }
-    ]
-    await expect(
-      prepareJob(prepareJobData.args, prepareJobOutputFilePath)
-    ).rejects.toThrow()
-  })
-
   it('should not run prepare job without the job container', async () => {
     prepareJobData.args.container = undefined
     await expect(
@@ -166,7 +153,7 @@ describe('Prepare job', () => {
 
     expect(got.metadata?.annotations?.['annotated-by']).toBe('extension')
     expect(got.metadata?.labels?.['labeled-by']).toBe('extension')
-    expect(got.spec?.securityContext?.runAsUser).toBe(1000)
+    expect(got.spec?.securityContext?.runAsUser).toBe(1001)
     expect(got.spec?.securityContext?.runAsGroup).toBe(3000)
 
     // job container

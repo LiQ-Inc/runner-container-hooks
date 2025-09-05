@@ -33,7 +33,7 @@ import {
   getJobPodName,
   JOB_CONTAINER_NAME
 } from './constants'
-import { dirname, isAbsolute } from 'path'
+import { dirname } from 'path'
 
 export async function prepareJob(
   args: PrepareJobArgs,
@@ -98,6 +98,13 @@ export async function prepareJob(
     `Job pod created, waiting for it to come online ${createdPod?.metadata?.name}`
   )
 
+  const runnerWorkspace = dirname(process.env.RUNNER_WORKSPACE as string)
+
+  let prepareScript: { containerPath: string; runnerPath: string } | undefined
+  if (args.container?.userMountVolumes?.length) {
+    prepareScript = prepareJobScript(args.container.userMountVolumes || [])
+  }
+
   try {
     await waitForPodPhases(
       createdPod.metadata.name,
@@ -110,16 +117,7 @@ export async function prepareJob(
     throw new Error(`pod failed to come online with error: ${err}`)
   }
 
-  let prepareScript: { containerPath: string; runnerPath: string } | undefined
-  if (args.container?.userMountVolumes?.length) {
-    prepareScript = prepareJobScript(args.container.userMountVolumes || [])
-  }
-
-  await execCpToPod(
-    createdPod.metadata.name,
-    dirname(process.env.RUNNER_WORKSPACE as string),
-    '/__w'
-  )
+  await execCpToPod(createdPod.metadata.name, runnerWorkspace, '/__w')
 
   if (prepareScript) {
     await execPodStep(
@@ -152,7 +150,7 @@ function generateResponseFile(
   responseFile: string,
   args: PrepareJobArgs,
   appPod: k8s.V1Pod,
-  isAlpine
+  isAlpine: boolean
 ): void {
   if (!appPod.metadata?.name) {
     throw new Error('app pod must have metadata.name specified')
@@ -218,21 +216,6 @@ export function createContainerSpec(
   if (!container.entryPoint && jobContainer) {
     container.entryPoint = DEFAULT_CONTAINER_ENTRY_POINT
     container.entryPointArgs = DEFAULT_CONTAINER_ENTRY_POINT_ARGS
-  }
-
-  const githubWorkspace = process.env.GITHUB_WORKSPACE as string
-  if (container.userMountVolumes?.length) {
-    for (const userVolume of container.userMountVolumes) {
-      if (
-        jobContainer &&
-        isAbsolute(userVolume.sourceVolumePath) &&
-        !userVolume.sourceVolumePath.startsWith(githubWorkspace)
-      ) {
-        throw new Error(
-          `Volume mount '${userVolume.sourceVolumePath}' outside of the work folder '${githubWorkspace}' are not supported`
-        )
-      }
-    }
   }
 
   const podContainer = {

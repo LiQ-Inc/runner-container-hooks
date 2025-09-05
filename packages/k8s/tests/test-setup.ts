@@ -14,25 +14,32 @@ const k8sStorageApi = kc.makeApiClient(k8s.StorageV1Api)
 export class TestHelper {
   private tempDirPath: string
   private podName: string
+  private runnerWorkdir: string
+  private runnerTemp: string
+
   constructor() {
     this.tempDirPath = `${__dirname}/_temp/runner`
+    this.runnerWorkdir = `${this.tempDirPath}/_work`
+    this.runnerTemp = `${this.tempDirPath}/_work/_temp`
     this.podName = uuidv4().replace(/-/g, '')
   }
 
   async initialize(): Promise<void> {
     process.env['ACTIONS_RUNNER_POD_NAME'] = `${this.podName}`
-    process.env['RUNNER_WORKSPACE'] = `${this.tempDirPath}/_work/repo`
-    process.env['RUNNER_TEMP'] = `${this.tempDirPath}/_work/_temp`
-    process.env['GITHUB_WORKSPACE'] = `${this.tempDirPath}/_work/repo/repo`
+    process.env['RUNNER_WORKSPACE'] = `${this.runnerWorkdir}/repo`
+    process.env['RUNNER_TEMP'] = `${this.runnerTemp}`
+    process.env['GITHUB_WORKSPACE'] = `${this.runnerWorkdir}/repo/repo`
     process.env['ACTIONS_RUNNER_KUBERNETES_NAMESPACE'] = 'default'
 
-    fs.mkdirSync(`${this.tempDirPath}/_work/repo/repo`, { recursive: true })
+    fs.mkdirSync(`${this.runnerWorkdir}/repo/repo`, { recursive: true })
     fs.mkdirSync(`${this.tempDirPath}/externals`, { recursive: true })
-    fs.mkdirSync(process.env.RUNNER_TEMP, { recursive: true })
+    fs.mkdirSync(this.runnerTemp, { recursive: true })
+    fs.mkdirSync(`${this.runnerTemp}/_github_workflow`, { recursive: true })
+    fs.mkdirSync(`${this.runnerTemp}/_github_home`, { recursive: true })
 
     fs.copyFileSync(
       path.resolve(`${__dirname}/../../../examples/example-script.sh`),
-      `${process.env.RUNNER_TEMP}/example-script.sh`
+      `${this.runnerTemp}/example-script.sh`
     )
 
     await this.cleanupK8sResources()
@@ -89,8 +96,8 @@ export class TestHelper {
 
   async createTestJobPod(): Promise<void> {
     const container = {
-      name: 'nginx',
-      image: 'nginx:latest',
+      name: 'runner',
+      image: 'ghcr.io/actions/actions-runner:latest',
       imagePullPolicy: 'IfNotPresent'
     } as k8s.V1Container
 
@@ -100,7 +107,12 @@ export class TestHelper {
       },
       spec: {
         restartPolicy: 'Never',
-        containers: [container]
+        containers: [container],
+        securityContext: {
+          runAsUser: 1001,
+          runAsGroup: 1001,
+          fsGroup: 1001,
+        }
       }
     } as k8s.V1Pod
     await k8sApi.createNamespacedPod({ namespace: 'default', body: pod })

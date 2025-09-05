@@ -32,6 +32,7 @@ const k8sAuthorizationV1Api = kc.makeApiClient(k8s.AuthorizationV1Api)
 const DEFAULT_WAIT_FOR_POD_TIME_SECONDS = 10 * 60 // 10 min
 
 export const EXTERNALS_VOLUME_NAME = 'externals'
+export const GITHUB_VOLUME_NAME = 'github'
 
 export const requiredPermissions = [
   {
@@ -100,12 +101,11 @@ export async function createJobPod(
       command: [
         'sh',
         '-c',
-        'sudo mv /home/runner/externals/* /mnt/externals && sudo chmod -R 777 /mnt/externals'
+        'sudo mv /home/runner/externals/* /mnt/externals'
       ],
       securityContext: {
         runAsGroup: 1001,
         runAsUser: 1001,
-        privileged: true
       },
       volumeMounts: [
         {
@@ -121,6 +121,10 @@ export async function createJobPod(
   appPod.spec.volumes = [
     {
       name: EXTERNALS_VOLUME_NAME,
+      emptyDir: {}
+    },
+    {
+      name: GITHUB_VOLUME_NAME,
       emptyDir: {}
     }
   ]
