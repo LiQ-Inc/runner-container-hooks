@@ -17,7 +17,7 @@ import {
   PodPhase,
   readExtensionFromFile,
   DEFAULT_CONTAINER_ENTRY_POINT_ARGS,
-  writeContainerStepScript,
+  writeContainerStepScript
 } from '../k8s/utils'
 import {
   getJobPodName,

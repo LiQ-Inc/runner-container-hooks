@@ -28,9 +28,7 @@ export function containerVolumes(): k8s.V1VolumeMount[] {
   ]
 }
 
-export function prepareJobScript(
-  userVolumeMounts: Mount[]
-): {
+export function prepareJobScript(userVolumeMounts: Mount[]): {
   containerPath: string
   runnerPath: string
 } {
