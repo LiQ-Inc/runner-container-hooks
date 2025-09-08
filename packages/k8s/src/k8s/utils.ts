@@ -3,7 +3,6 @@ import * as fs from 'fs'
 import * as yaml from 'js-yaml'
 import * as core from '@actions/core'
 import { v1 as uuidv4 } from 'uuid'
-import { EXTERNALS_VOLUME_NAME, GITHUB_VOLUME_NAME } from './index'
 import { CONTAINER_EXTENSION_PREFIX } from '../hooks/constants'
 import * as shlex from 'shlex'
 import { Mount } from 'hooklib'
@@ -13,6 +12,9 @@ export const DEFAULT_CONTAINER_ENTRY_POINT = 'tail'
 
 export const ENV_HOOK_TEMPLATE_PATH = 'ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE'
 export const ENV_USE_KUBE_SCHEDULER = 'ACTIONS_RUNNER_USE_KUBE_SCHEDULER'
+
+export const EXTERNALS_VOLUME_NAME = 'externals'
+export const GITHUB_VOLUME_NAME = 'github'
 
 export const CONTAINER_VOLUMES: k8s.V1VolumeMount[] = [
   {

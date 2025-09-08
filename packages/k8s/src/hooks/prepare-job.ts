@@ -270,6 +270,8 @@ export function createContainerSpec(
 
   podContainer.volumeMounts = CONTAINER_VOLUMES
 
+  console.log(JSON.stringify(podContainer))
+
   if (!extension) {
     return podContainer
   }

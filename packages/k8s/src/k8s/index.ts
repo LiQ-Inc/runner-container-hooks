@@ -18,7 +18,9 @@ import {
   mergeObjectMeta,
   fixArgs,
   listDirAllCommand,
-  sleep
+  sleep,
+  EXTERNALS_VOLUME_NAME,
+  GITHUB_VOLUME_NAME
 } from './utils'
 
 const kc = new k8s.KubeConfig()
@@ -30,9 +32,6 @@ const k8sBatchV1Api = kc.makeApiClient(k8s.BatchV1Api)
 const k8sAuthorizationV1Api = kc.makeApiClient(k8s.AuthorizationV1Api)
 
 const DEFAULT_WAIT_FOR_POD_TIME_SECONDS = 10 * 60 // 10 min
-
-export const EXTERNALS_VOLUME_NAME = 'externals'
-export const GITHUB_VOLUME_NAME = 'github'
 
 export const requiredPermissions = [
   {
