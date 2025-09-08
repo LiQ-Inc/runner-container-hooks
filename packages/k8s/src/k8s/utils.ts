@@ -32,9 +32,7 @@ export function prepareJobScript(userVolumeMounts: Mount[]): {
   containerPath: string
   runnerPath: string
 } {
-  let mountDirs = userVolumeMounts
-    .map(m => dirname(m.targetVolumePath))
-    .join(' ')
+  let mountDirs = userVolumeMounts.map(m => m.targetVolumePath).join(' ')
 
   const content = `#!/bin/sh -l
 set -e

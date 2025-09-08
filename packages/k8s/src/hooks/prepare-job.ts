@@ -125,6 +125,18 @@ export async function prepareJob(
       createdPod.metadata.name,
       JOB_CONTAINER_NAME
     )
+
+    const promises: Promise<void>[] = []
+    for (const vol of args?.container?.userMountVolumes || []) {
+      promises.push(
+        execCpToPod(
+          createdPod.metadata.name,
+          vol.sourceVolumePath,
+          vol.targetVolumePath
+        )
+      )
+    }
+    await Promise.all(promises)
   }
 
   core.debug('Job pod is ready for traffic')
