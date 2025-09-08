@@ -2,7 +2,6 @@ import * as k8s from '@kubernetes/client-node'
 import * as fs from 'fs'
 import * as yaml from 'js-yaml'
 import * as core from '@actions/core'
-import { dirname } from 'path'
 import { v1 as uuidv4 } from 'uuid'
 import { EXTERNALS_VOLUME_NAME, GITHUB_VOLUME_NAME } from './index'
 import { CONTAINER_EXTENSION_PREFIX } from '../hooks/constants'
@@ -15,18 +14,16 @@ export const DEFAULT_CONTAINER_ENTRY_POINT = 'tail'
 export const ENV_HOOK_TEMPLATE_PATH = 'ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE'
 export const ENV_USE_KUBE_SCHEDULER = 'ACTIONS_RUNNER_USE_KUBE_SCHEDULER'
 
-export function containerVolumes(): k8s.V1VolumeMount[] {
-  return [
-    {
-      name: EXTERNALS_VOLUME_NAME,
-      mountPath: '/__e'
-    },
-    {
-      name: GITHUB_VOLUME_NAME,
-      mountPath: '/github'
-    }
-  ]
-}
+export const CONTAINER_VOLUMES: k8s.V1VolumeMount[] = [
+  {
+    name: EXTERNALS_VOLUME_NAME,
+    mountPath: '/__e'
+  },
+  {
+    name: GITHUB_VOLUME_NAME,
+    mountPath: '/github'
+  }
+]
 
 export function prepareJobScript(userVolumeMounts: Mount[]): {
   containerPath: string

@@ -12,7 +12,7 @@ import {
   waitForPodPhases
 } from '../k8s'
 import {
-  containerVolumes,
+  CONTAINER_VOLUMES,
   mergeContainerWithOptions,
   PodPhase,
   readExtensionFromFile,
@@ -126,7 +126,7 @@ function createContainerSpec(
   podContainer.command = ['/__e/tail']
   podContainer.args = DEFAULT_CONTAINER_ENTRY_POINT_ARGS
 
-  podContainer.volumeMounts = containerVolumes()
+  podContainer.volumeMounts = CONTAINER_VOLUMES
 
   if (!extension) {
     return podContainer

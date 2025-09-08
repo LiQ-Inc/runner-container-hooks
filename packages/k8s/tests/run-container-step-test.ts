@@ -1,4 +1,4 @@
-import { runContainerStep } from '../src/hooks'
+import { prepareJob, runContainerStep } from '../src/hooks'
 import { TestHelper } from './test-setup'
 import { ENV_HOOK_TEMPLATE_PATH } from '../src/k8s/utils'
 import * as fs from 'fs'
@@ -10,11 +10,20 @@ jest.useRealTimers()
 let testHelper: TestHelper
 
 let runContainerStepData: any
+let prepareJobData: any
+let prepareJobOutputFilePath: string
 
 describe('Run container step', () => {
   beforeEach(async () => {
     testHelper = new TestHelper()
     await testHelper.initialize()
+    prepareJobData = testHelper.getPrepareJobDefinition()
+    prepareJobOutputFilePath = testHelper.createFile('prepare-job-output.json')
+    await prepareJob(prepareJobData.args, prepareJobOutputFilePath)
+    const content = JSON.parse(
+      fs.readFileSync(prepareJobOutputFilePath)!.toString()
+    )
+    process.env.ACTIONS_RUNNER_POD_NAME = content.state.jobPod
     runContainerStepData = testHelper.getRunContainerStepDefinition()
   })
 

@@ -204,6 +204,10 @@ export async function createContainerStepPod(
     {
       name: EXTERNALS_VOLUME_NAME,
       emptyDir: {}
+    },
+    {
+      name: GITHUB_VOLUME_NAME,
+      emptyDir: {}
     }
   ]
 
